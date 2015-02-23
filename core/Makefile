@@ -265,7 +265,6 @@ endif
 			TARGET_CPU_ABI="$(TARGET_CPU_ABI)" \
 			TARGET_CPU_ABI2="$(TARGET_CPU_ABI2)" \
 			TARGET_AAPT_CHARACTERISTICS="$(TARGET_AAPT_CHARACTERISTICS)" \
-			TARGET_UNIFIED_DEVICE="$(TARGET_UNIFIED_DEVICE)" \
 			PRODUCT_CHIPSET="$(PRODUCT_CHIPSET)" \
 			PRODUCT_GPU="$(PRODUCT_GPU)" \
 			PRODUCT_FRONT_CAM="$(PRODUCT_FRONT_CAM)" \
@@ -412,7 +411,6 @@ endif
 # deliverables will be re-signed by hand.  We expect this file to
 # exist with the suffixes ".x509.pem" and ".pk8".
 DEFAULT_KEY_CERT_PAIR := $(DEFAULT_SYSTEM_DEV_CERTIFICATE)
-
 
 # Rules that need to be present for the all targets, even
 # if they don't do anything.
@@ -1532,9 +1530,10 @@ $(INTERNAL_OTA_PACKAGE_TARGET): $(BUILT_TARGET_FILES_PACKAGE) $(DISTTOOLS)
 	   $(if $(OEM_OTA_CONFIG), -o $(OEM_OTA_CONFIG)) \
 	   $(BUILT_TARGET_FILES_PACKAGE) $@
 
-.PHONY: otapackage
+.PHONY: otapackage deso
 otapackage: $(INTERNAL_OTA_PACKAGE_TARGET)
 
+deso: otapackage
 ifeq ($(USE_PREBUILT_CHROMIUM),1)
 ifneq ($(PRODUCT_PREBUILT_WEBVIEWCHROMIUM),yes)
 	@echo "Running Chromium prebuilt setup script..."
