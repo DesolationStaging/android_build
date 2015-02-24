@@ -1637,7 +1637,7 @@ else
     OTA_FROM_TARGET_SCRIPT := $(TARGET_RELEASETOOL_OTA_FROM_TARGET_SCRIPT)
 endif
 
-DESO_TARGET_PACKAGE := $(PRODUCT_OUT)/$(DESO_VERSION).zip
+DESO_TARGET_PACKAGE := $(PRODUCT_OUT)/Desolation-$(TARGET_PRODUCT_SHORT)-$(ROM_VERSION)-$(ROM_BUILDTYPE).zip
 
 BOOT_ZIP_FROM_IMAGE_SCRIPT := ./build/tools/releasetools/boot_flash_from_image
 KERNEL_PATH := $(TARGET_KERNEL_SOURCE)/arch/arm/configs/$(TARGET_KERNEL_CONFIG)
@@ -1686,17 +1686,14 @@ ifneq ($(PRODUCT_PREBUILT_WEBVIEWCHROMIUM),yes)
 	$(hide) . $(TOPDIR)vendor/deso/utils/chromium_prebuilt.sh $(TOP)
 endif
 endif
-	@echo -e ${PRT_CPL}"Package complete: $(CUSTOM_TARGET_PACKAGE)"${CL_RST}
-
-ifneq ($(TARGET_CUSTOM_RELEASETOOL),)
-	@echo "Running releasetool"
+	$(hide) ln -f $(INTERNAL_OTA_PACKAGE_TARGET) $(DESO_TARGET_PACKAGE)
+	$(hide) $(MD5SUM) $(DESO_TARGET_PACKAGE) > $(DESO_TARGET_PACKAGE).md5
 	$(hide) clear
-	$(hide) OTAPACKAGE=$(INTERNAL_OTA_PACKAGE_TARGET) $(TARGET_CUSTOM_RELEASETOOL)
-else
-	$(hide) clear
-	$(hide) ./vendor/deso/tools/squisher $(ROM_BUILDTYPE)
-endif
-
+	@echo -e ${CL_CYN}" =-Desolation complete-= "${CL_RST}
+	@echo -e ${CL_GRN}"zip: $(DESO_TARGET_PACKAGE)"${CL_RST}
+	@echo -e ${CL_GRN}"md5: "${CL_MAG}" `cat $(DESO_TARGET_PACKAGE).md5 | cut -d ' ' -f 1`"${CL_RST}
+	@echo -e ""
+	
 bootzip: bootimage
 	$(BOOT_ZIP_FROM_IMAGE_SCRIPT) \
 	   $(recovery_fstab) \
