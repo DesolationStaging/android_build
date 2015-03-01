@@ -494,6 +494,9 @@ endif
 ifeq ($(MAKECMDGOALS),installclean)
 dont_bother := true
 endif
+ifeq ($(MAKECMDGOALS),chromiumclean)
+dont_bother := true
+endif
 
 # Bring in all modules that need to be built.
 ifeq ($(HOST_OS),windows)
