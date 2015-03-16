@@ -283,25 +283,19 @@ function settitle()
     fi
 }
 
-function addcompletions()
+function check_bash_version()
 {
     # Keep us from trying to run in something that isn't bash.
     if [ -z "${BASH_VERSION}" ]; then
-        return
+        return 1
     fi
 
     # Keep us from trying to run in bash that's too old.
     if [ "${BASH_VERSINFO[0]}" -lt 4 ] ; then
-        return
+        return 2
     fi
 
-    dir="sdk/bash_completion"
-    if [ -d ${dir} ]; then
-        for f in `/bin/ls ${dir}/[a-z]*.bash 2> /dev/null`; do
-            echo "including $f"
-            . $f
-        done
-    fi
+    return 0
 }
 
 function choosetype()
@@ -539,12 +533,12 @@ unset f
         # No arguments, so let's have the full menu
         lunch
     else
-echo "z$target" | grep -q "-"
+        echo "z$target" | grep -q "-"
         if [ $? -eq 0 ]; then
             # A buildtype was specified, assume a full device name
             lunch $target
         else
-            # This is probably just the Plain model name
+            # This is probably just the DesolationROM model name
             if [ -z "$variant" ]; then
                 variant="userdebug"
             fi
@@ -595,7 +589,7 @@ function lunch()
     check_product $product
     if [ $? -ne 0 ]
     then
-        # if we can't find a product, try to grab it off the Plain github
+        # if we can't find a product, try to grab it off the DesolationROM github
         T=$(gettop)
         pushd $T > /dev/null
         build/tools/roomservice.py $product
@@ -664,7 +658,8 @@ function tapas()
 {
     local arch="$(echo $* | xargs -n 1 echo | \grep -E '^(arm|x86|mips|armv5|arm64|x86_64|mips64)$' | xargs)"
     local variant="$(echo $* | xargs -n 1 echo | \grep -E '^(user|userdebug|eng)$' | xargs)"
-    local apps="$(echo $* | xargs -n 1 echo | \grep -E -v '^(user|userdebug|eng|arm|x86|mips|armv5|arm64|x86_64|mips64)$' | xargs)"
+    local density="$(echo $* | xargs -n 1 echo | \grep -E '^(ldpi|mdpi|tvdpi|hdpi|xhdpi|xxhdpi|xxxhdpi|alldpi)$' | xargs)"
+    local apps="$(echo $* | xargs -n 1 echo | \grep -E -v '^(user|userdebug|eng|arm|x86|mips|armv5|arm64|x86_64|mips64|ldpi|mdpi|tvdpi|hdpi|xhdpi|xxhdpi|xxxhdpi|alldpi)$' | xargs)"
 
     if [ $(echo $arch | wc -w) -gt 1 ]; then
         echo "tapas: Error: Multiple build archs supplied: $arch"
@@ -672,6 +667,10 @@ function tapas()
     fi
     if [ $(echo $variant | wc -w) -gt 1 ]; then
         echo "tapas: Error: Multiple build variants supplied: $variant"
+        return
+    fi
+    if [ $(echo $density | wc -w) -gt 1 ]; then
+        echo "tapas: Error: Multiple densities supplied: $density"
         return
     fi
 
@@ -690,9 +689,13 @@ function tapas()
     if [ -z "$apps" ]; then
         apps=all
     fi
+    if [ -z "$density" ]; then
+        density=alldpi
+    fi
 
     export TARGET_PRODUCT=$product
     export TARGET_BUILD_VARIANT=$variant
+    export TARGET_BUILD_DENSITY=$density
     export TARGET_BUILD_TYPE=release
     export TARGET_BUILD_APPS=$apps
 
@@ -750,8 +753,6 @@ function mmmp()
     rm -f .log
     return 0
 }
-
-alias mmp='mmmp .'
 
 function gettop
 {
@@ -1040,6 +1041,85 @@ function pid()
     fi
 }
 
+# coredump_setup - enable core dumps globally for any process
+#                  that has the core-file-size limit set correctly
+#
+# NOTE: You must call also coredump_enable for a specific process
+#       if its core-file-size limit is not set already.
+# NOTE: Core dumps are written to ramdisk; they will not survive a reboot!
+
+function coredump_setup()
+{
+	echo "Getting root...";
+	adb root;
+	adb wait-for-device;
+
+	echo "Remounting root parition read-write...";
+	adb shell mount -w -o remount -t rootfs rootfs;
+	sleep 1;
+	adb wait-for-device;
+	adb shell mkdir -p /cores;
+	adb shell mount -t tmpfs tmpfs /cores;
+	adb shell chmod 0777 /cores;
+
+	echo "Granting SELinux permission to dump in /cores...";
+	adb shell restorecon -R /cores;
+
+	echo "Set core pattern.";
+	adb shell 'echo /cores/core.%p > /proc/sys/kernel/core_pattern';
+
+	echo "Done."
+}
+
+# coredump_enable - enable core dumps for the specified process
+# $1 = PID of process (e.g., $(pid mediaserver))
+#
+# NOTE: coredump_setup must have been called as well for a core
+#       dump to actually be generated.
+
+function coredump_enable()
+{
+	local PID=$1;
+	if [ -z "$PID" ]; then
+		printf "Expecting a PID!\n";
+		return;
+	fi;
+	echo "Setting core limit for $PID to infinite...";
+	adb shell prlimit $PID 4 -1 -1
+}
+
+# core - send SIGV and pull the core for process
+# $1 = PID of process (e.g., $(pid mediaserver))
+#
+# NOTE: coredump_setup must be called once per boot for core dumps to be
+#       enabled globally.
+
+function core()
+{
+	local PID=$1;
+
+	if [ -z "$PID" ]; then
+		printf "Expecting a PID!\n";
+		return;
+	fi;
+
+	local CORENAME=core.$PID;
+	local COREPATH=/cores/$CORENAME;
+	local SIG=SEGV;
+
+	coredump_enable $1;
+
+	local done=0;
+	while [ $(adb shell "[ -d /proc/$PID ] && echo -n yes") ]; do
+		printf "\tSending SIG%s to %d...\n" $SIG $PID;
+		adb shell kill -$SIG $PID;
+		sleep 1;
+	done;
+
+	adb shell "while [ ! -f $COREPATH ] ; do echo waiting for $COREPATH to be generated; sleep 1; done"
+	echo "Done: core is under $COREPATH on device.";
+}
+
 # systemstack - dump the current stack trace of all threads in the system process
 # to the usual ANR traces file
 function systemstack()
@@ -1123,10 +1203,151 @@ function is64bit()
     fi
 }
 
+function adb_get_product_device() {
+  echo `adb shell getprop ro.product.device | sed s/.$//`
+}
+
+# returns 0 when process is not traced
+function adb_get_traced_by() {
+  echo `adb shell cat /proc/$1/status | grep -e "^TracerPid:" | sed "s/^TracerPid:\t//" | sed s/.$//`
+}
+
+function gdbclient() {
+  # TODO:
+  # 1. Check for ANDROID_SERIAL/multiple devices
+  local PROCESS_NAME="n/a"
+  local PID=$1
+  local PORT=5039
+  if [ -z "$PID" ]; then
+    echo "Usage: gdbclient <pid|processname> [port number]"
+    return -1
+  fi
+  local DEVICE=$(adb_get_product_device)
+
+  if [ -z "$DEVICE" ]; then
+    echo "Error: Unable to get device name. Please check if device is connected and ANDROID_SERIAL is set."
+    return -2
+  fi
+
+  if [ -n "$2" ]; then
+    PORT=$2
+  fi
+
+  local ROOT=$(gettop)
+  if [ -z "$ROOT" ]; then
+    # This is for the situation with downloaded symbols (from the build server)
+    # we check if they are available.
+    ROOT=`realpath .`
+  fi
+
+  local OUT_ROOT="$ROOT/out/target/product/$DEVICE"
+  local SYMBOLS_DIR="$OUT_ROOT/symbols"
+
+  if [ ! -d $SYMBOLS_DIR ]; then
+    echo "Error: couldn't find symbols: $SYMBOLS_DIR does not exist or is not a directory."
+    return -3
+  fi
+
+  # let's figure out which executable we are about to debug
+
+  # check if user specified a name -> resolve to pid
+  if [[ ! "$PID" =~ ^[0-9]+$ ]] ; then
+    PROCESS_NAME=$PID
+    PID=$(pid --exact $PROCESS_NAME)
+    if [ -z "$PID" ]; then
+      echo "Error: couldn't resolve pid by process name: $PROCESS_NAME"
+      return -4
+    fi
+  fi
+
+  local EXE=`adb shell readlink /proc/$PID/exe | sed s/.$//`
+  # TODO: print error in case there is no such pid
+  local LOCAL_EXE_PATH=$SYMBOLS_DIR$EXE
+
+  if [ ! -f $LOCAL_EXE_PATH ]; then
+    echo "Error: unable to find symbols for executable $EXE: file $LOCAL_EXE_PATH does not exist"
+    return -5
+  fi
+
+  local USE64BIT=""
+
+  if [[ "$(file $LOCAL_EXE_PATH)" =~ 64-bit ]]; then
+    USE64BIT="64"
+  fi
+
+  local GDB=
+  local GDB64=
+  local CPU_ABI=`adb shell getprop ro.product.cpu.abilist | sed s/.$//`
+  # TODO: we assume these are available via $PATH
+  if [[ $CPU_ABI =~ (^|,)arm64 ]]; then
+    GDB=arm-linux-androideabi-gdb
+    GDB64=aarch64-linux-android-gdb
+  elif [[ $CPU_ABI =~ (^|,)arm ]]; then
+    GDB=arm-linux-androideabi-gdb
+  elif [[ $CPU_ABI =~ (^|,)x86_64 ]]; then
+    GDB=x86_64-linux-androideabi-gdb
+  elif [[ $CPU_ABI =~ (^|,)x86 ]]; then
+    GDB=x86_64-linux-androideabi-gdb
+  elif [[ $CPU_ABI =~ (^|,)mips64 ]]; then
+    GDB=mipsel-linux-android-gdb
+    GDB64=mips64el-linux-android-gdb
+  elif [[ $CPU_ABI =~ (^|,)mips ]]; then
+    GDB=mipsel-linux-android-gdb
+  else
+    echo "Error: unrecognized cpu.abilist: $CPU_ABI"
+    return -6
+  fi
+
+  # TODO: check if tracing process is gdbserver and not some random strace...
+  if [ $(adb_get_traced_by $PID) -eq 0 ]; then
+    # start gdbserver
+    echo "Starting gdbserver..."
+    # TODO: check if adb is already listening $PORT
+    # to avoid unnecessary calls
+    echo ". adb forward for port=$PORT..."
+    adb forward tcp:$PORT tcp:$PORT
+    echo ". starting gdbserver to attach to pid=$PID..."
+    adb shell gdbserver$USE64BIT :$PORT --attach $PID &
+    echo ". give it couple of seconds to start..."
+    sleep 2
+    echo ". done"
+  else
+    echo "It looks like gdbserver is already attached to $PID (process is traced), trying to connect to it using local port=$PORT"
+  fi
+
+  local OUT_SO_SYMBOLS=$SYMBOLS_DIR/system/lib$USE64BIT
+  local OUT_VENDOR_SO_SYMBOLS=$SYMBOLS_DIR/vendor/lib$USE64BIT
+  local ART_CMD=""
+
+  echo >|"$OUT_ROOT/gdbclient.cmds" "set solib-absolute-prefix $SYMBOLS_DIR"
+  echo >>"$OUT_ROOT/gdbclient.cmds" "set solib-search-path $OUT_SO_SYMBOLS:$OUT_SO_SYMBOLS/hw:$OUT_SO_SYMBOLS/ssl/engines:$OUT_SO_SYMBOLS/drm:$OUT_SO_SYMBOLS/egl:$OUT_SO_SYMBOLS/soundfx:$OUT_VENDOR_SO_SYMBOLS:$OUT_VENDOR_SO_SYMBOLS/hw:$OUT_VENDOR_SO_SYMBOLS/egl"
+  local DALVIK_GDB_SCRIPT=$ROOT/development/scripts/gdb/dalvik.gdb
+  if [ -f $DALVIK_GDB_SCRIPT ]; then
+    echo >>"$OUT_ROOT/gdbclient.cmds" "source $DALVIK_GDB_SCRIPT"
+    ART_CMD="art-on"
+  else
+    echo "Warning: couldn't find $DALVIK_GDB_SCRIPT - ART debugging options will not be available"
+  fi
+  echo >>"$OUT_ROOT/gdbclient.cmds" "target remote :$PORT"
+  if [[ $EXE =~ (^|/)(app_process|dalvikvm)(|32|64)$ ]]; then
+    echo >> "$OUT_ROOT/gdbclient.cmds" $ART_CMD
+  fi
+
+  echo >>"$OUT_ROOT/gdbclient.cmds" ""
+
+  local WHICH_GDB=$GDB
+
+  if [ -n "$USE64BIT" -a -n "$GDB64" ]; then
+    WHICH_GDB=$GDB64
+  fi
+
+  gdbwrapper $WHICH_GDB "$OUT_ROOT/gdbclient.cmds" "$LOCAL_EXE_PATH"
+}
+
 # gdbclient now determines whether the user wants to debug a 32-bit or 64-bit
 # executable, set up the approriate gdbserver, then invokes the proper host
 # gdb.
-function gdbclient()
+function gdbclient_old()
 {
    local OUT_ROOT=$(get_abs_build_var PRODUCT_OUT)
    local OUT_SYMBOLS=$(get_abs_build_var TARGET_OUT_UNSTRIPPED)
@@ -1226,6 +1447,107 @@ function gdbclient()
    fi
 
 }
+
+function dddclient()
+{
+   local OUT_ROOT=$(get_abs_build_var PRODUCT_OUT)
+   local OUT_SYMBOLS=$(get_abs_build_var TARGET_OUT_UNSTRIPPED)
+   local OUT_SO_SYMBOLS=$(get_abs_build_var TARGET_OUT_SHARED_LIBRARIES_UNSTRIPPED)
+   local OUT_VENDOR_SO_SYMBOLS=$(get_abs_build_var TARGET_OUT_VENDOR_SHARED_LIBRARIES_UNSTRIPPED)
+   local OUT_EXE_SYMBOLS=$(get_symbols_directory)
+   local PREBUILTS=$(get_abs_build_var ANDROID_PREBUILTS)
+   local ARCH=$(get_build_var TARGET_ARCH)
+   local GDB
+   case "$ARCH" in
+       arm) GDB=arm-linux-androideabi-gdb;;
+       arm64) GDB=arm-linux-androideabi-gdb; GDB64=aarch64-linux-android-gdb;;
+       mips|mips64) GDB=mips64el-linux-android-gdb;;
+       x86) GDB=x86_64-linux-android-gdb;;
+       x86_64) GDB=x86_64-linux-android-gdb;;
+       *) echo "Unknown arch $ARCH"; return 1;;
+   esac
+
+   if [ "$OUT_ROOT" -a "$PREBUILTS" ]; then
+       local EXE="$1"
+       if [ "$EXE" ] ; then
+           EXE=$1
+           if [[ $EXE =~ ^[^/].* ]] ; then
+               EXE="system/bin/"$EXE
+           fi
+       else
+           EXE="app_process"
+       fi
+
+       local PORT="$2"
+       if [ "$PORT" ] ; then
+           PORT=$2
+       else
+           PORT=":5039"
+       fi
+
+       local PID="$3"
+       if [ "$PID" ] ; then
+           if [[ ! "$PID" =~ ^[0-9]+$ ]] ; then
+               PID=`pid $3`
+               if [[ ! "$PID" =~ ^[0-9]+$ ]] ; then
+                   # that likely didn't work because of returning multiple processes
+                   # try again, filtering by root processes (don't contain colon)
+                   PID=`adb shell ps | \grep $3 | \grep -v ":" | awk '{print $2}'`
+                   if [[ ! "$PID" =~ ^[0-9]+$ ]]
+                   then
+                       echo "Couldn't resolve '$3' to single PID"
+                       return 1
+                   else
+                       echo ""
+                       echo "WARNING: multiple processes matching '$3' observed, using root process"
+                       echo ""
+                   fi
+               fi
+           fi
+           adb forward "tcp$PORT" "tcp$PORT"
+           local USE64BIT="$(is64bit $PID)"
+           adb shell gdbserver$USE64BIT $PORT --attach $PID &
+           sleep 2
+       else
+               echo ""
+               echo "If you haven't done so already, do this first on the device:"
+               echo "    gdbserver $PORT /system/bin/$EXE"
+                   echo " or"
+               echo "    gdbserver $PORT --attach <PID>"
+               echo ""
+       fi
+
+       OUT_SO_SYMBOLS=$OUT_SO_SYMBOLS$USE64BIT
+       OUT_VENDOR_SO_SYMBOLS=$OUT_VENDOR_SO_SYMBOLS$USE64BIT
+
+       echo >|"$OUT_ROOT/gdbclient.cmds" "set solib-absolute-prefix $OUT_SYMBOLS"
+       echo >>"$OUT_ROOT/gdbclient.cmds" "set solib-search-path $OUT_SO_SYMBOLS:$OUT_SO_SYMBOLS/hw:$OUT_SO_SYMBOLS/ssl/engines:$OUT_SO_SYMBOLS/drm:$OUT_SO_SYMBOLS/egl:$OUT_SO_SYMBOLS/soundfx:$OUT_VENDOR_SO_SYMBOLS:$OUT_VENDOR_SO_SYMBOLS/hw:$OUT_VENDOR_SO_SYMBOLS/egl"
+       echo >>"$OUT_ROOT/gdbclient.cmds" "source $ANDROID_BUILD_TOP/development/scripts/gdb/dalvik.gdb"
+       echo >>"$OUT_ROOT/gdbclient.cmds" "target remote $PORT"
+       # Enable special debugging for ART processes.
+       if [[ $EXE =~ (^|/)(app_process|dalvikvm)(|32|64)$ ]]; then
+          echo >> "$OUT_ROOT/gdbclient.cmds" "art-on"
+       fi
+       echo >>"$OUT_ROOT/gdbclient.cmds" ""
+
+       local WHICH_GDB=
+       # 64-bit exe found
+       if [ "$USE64BIT" != "" ] ; then
+           WHICH_GDB=$ANDROID_TOOLCHAIN/$GDB64
+       # 32-bit exe / 32-bit platform
+       elif [ "$(get_build_var TARGET_2ND_ARCH)" = "" ]; then
+           WHICH_GDB=$ANDROID_TOOLCHAIN/$GDB
+       # 32-bit exe / 64-bit platform
+       else
+           WHICH_GDB=$ANDROID_TOOLCHAIN_2ND_ARCH/$GDB
+       fi
+
+       ddd --debugger $WHICH_GDB -x "$OUT_ROOT/gdbclient.cmds" "$OUT_EXE_SYMBOLS/$EXE"
+  else
+       echo "Unable to determine build system output dir."
+   fi
+}
+
 
 case `uname -s` in
     Darwin)
@@ -1629,7 +1951,7 @@ function reposync() {
             repo sync -j 4 "$@"
             ;;
         *)
-            schedtool -B -n 1 -e ionice -n 1 repo sync -j 4 "$@"
+            schedtool -B -n 1 -e ionice -n 1 `which repo` sync -j 8 "$@"
             ;;
     esac
 }
@@ -1764,6 +2086,17 @@ do
 done
 unset f
 
-addcompletions
+# Add completions
+check_bash_version && {
+    dirs="sdk/bash_completion vendor/deso/bash_completion"
+    for dir in $dirs; do
+    if [ -d ${dir} ]; then
+        for f in `/bin/ls ${dir}/[a-z]*.bash 2> /dev/null`; do
+            echo "including $f"
+            . $f
+        done
+    fi
+    done
+}
 
 export ANDROID_BUILD_TOP=$(gettop)

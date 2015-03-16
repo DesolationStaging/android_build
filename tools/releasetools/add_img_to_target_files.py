@@ -282,7 +282,6 @@ def AddImagesToTargetFiles(filename):
 
   output_zip.close()
 
-
 def main(argv):
   args = common.ParseOptions(argv, __doc__)
 

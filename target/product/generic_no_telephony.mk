@@ -20,12 +20,12 @@
 PRODUCT_PACKAGES := \
     Bluetooth \
     Camera2 \
+    Email \
     Gallery2 \
     OneTimeInitializer \
     Provision \
     SystemUI \
-    WallpaperCropper \
-    Email
+    WallpaperCropper
 
 PRODUCT_PACKAGES += \
     clatd \

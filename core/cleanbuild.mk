@@ -205,9 +205,9 @@ installclean_files := \
 	$(PRODUCT_OUT)/*.txt \
 	$(PRODUCT_OUT)/*.xlb \
 	$(PRODUCT_OUT)/*.zip \
-	$(PRODUCT_OUT)/*.zip.md5sum \
 	$(PRODUCT_OUT)/*.zip.md5 \
 	$(PRODUCT_OUT)/kernel \
+	$(PRODUCT_OUT)/*.zip.md5sum \
 	$(PRODUCT_OUT)/data \
 	$(PRODUCT_OUT)/skin \
 	$(PRODUCT_OUT)/obj/APPS \
@@ -222,6 +222,7 @@ installclean_files := \
 	$(PRODUCT_OUT)/obj/JAVA_LIBRARIES \
 	$(PRODUCT_OUT)/obj/FAKE \
 	$(PRODUCT_OUT)/obj/EXECUTABLES/adbd_intermediates \
+	$(PRODUCT_OUT)/obj/STATIC_LIBRARIES/libfs_mgr_intermediates \
 	$(PRODUCT_OUT)/obj/EXECUTABLES/init_intermediates \
 	$(PRODUCT_OUT)/obj/ETC/mac_permissions.xml_intermediates \
 	$(PRODUCT_OUT)/obj/ETC/sepolicy_intermediates \

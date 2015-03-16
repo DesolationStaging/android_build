@@ -23,10 +23,6 @@ PRODUCT_PACKAGES := \
     libfwdlockengine \
     WAPPushManager
 
-PRODUCT_PACKAGES += \
-    LiveWallpapers \
-    LiveWallpapersPicker \
-
 # Additional settings used in all AOSP builds
 PRODUCT_PROPERTY_OVERRIDES := \
     ro.com.android.dateformat=MM-dd-yyyy \
@@ -37,7 +33,7 @@ PRODUCT_PROPERTY_OVERRIDES := \
 PRODUCT_LOCALES := en_US
 
 # Include drawables for all densities
-PRODUCT_AAPT_CONFIG := normal hdpi xhdpi xxhdpi
+PRODUCT_AAPT_CONFIG := normal
 
 # Get some sounds
 $(call inherit-product-if-exists, frameworks/base/data/sounds/AllAudioDeso.mk)

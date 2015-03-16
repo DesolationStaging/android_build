@@ -12,21 +12,13 @@ else
 ifeq ($(strip $(TARGET_$(combo_2nd_arch_prefix)CPU_VARIANT)),cortex-a9)
 	arch_variant_cflags := -mcpu=cortex-a9
 else
-ifeq ($(strip $(TARGET_$(combo_2nd_arch_prefix)CPU_VARIANT)),cortex-a9)
-	arch_variant_cflags := -mcpu=cortex-a9
-else
 ifneq (,$(filter cortex-a8 scorpion,$(TARGET_$(combo_2nd_arch_prefix)CPU_VARIANT)))
 	arch_variant_cflags := -mcpu=cortex-a8
 else
 ifeq ($(strip $(TARGET_$(combo_2nd_arch_prefix)CPU_VARIANT)),cortex-a7)
 	arch_variant_cflags := -mcpu=cortex-a7
 else
-ifeq ($(strip $(TARGET_$(combo_2nd_arch_prefix)CPU_VARIANT)),cortex-a5)
-	arch_variant_cflags := -mcpu=cortex-a5
-else
 	arch_variant_cflags := -march=armv7-a
-endif
-endif
 endif
 endif
 endif
