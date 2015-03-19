@@ -1686,7 +1686,7 @@ ifneq ($(TARGET_UNIFIED_DEVICE),)
         $(INTERNAL_OTA_PACKAGE_TARGET): override_device := $(TARGET_DEVICE)
     endif
 endif
-
+ifneq ($(USE_FILEBASE_ZIP), true)
 $(INTERNAL_OTA_PACKAGE_TARGET): $(BUILT_TARGET_FILES_PACKAGE) $(DISTTOOLS)
 	@echo "$(OTA_FROM_TARGET_SCRIPT)" > $(PRODUCT_OUT)/ota_script_path
 	@echo "$(override_device)" > $(PRODUCT_OUT)/ota_override_device
@@ -1701,6 +1701,21 @@ $(INTERNAL_OTA_PACKAGE_TARGET): $(BUILT_TARGET_FILES_PACKAGE) $(DISTTOOLS)
 	   --backup=$(backuptool) \
 	   --override_device=$(override_device) $(override_prop) \
 	   $(BUILT_TARGET_FILES_PACKAGE) $@
+else
+$(INTERNAL_OTA_PACKAGE_TARGET): $(BUILT_TARGET_FILES_PACKAGE) $(DISTTOOLS)
+	@echo "$(OTA_FROM_TARGET_SCRIPT)" > $(PRODUCT_OUT)/ota_script_path
+	@echo "$(override_device)" > $(PRODUCT_OUT)/ota_override_device
+	@echo -e ${CL_YLW}"Package OTA:"${CL_RST}" $@"
+	$(hide) MKBOOTIMG=$(MKBOOTIMG) \
+	   CUSTOM_BOOTING_MK=$(BOARD_CUSTOM_BOOTIMG_MK) \
+	   $(OTA_FROM_TARGET_SCRIPT) -v \
+	   -p $(HOST_OUT) \
+	   -k $(KEY_CERT_PAIR) \
+	   $(if $(OEM_OTA_CONFIG), -o $(OEM_OTA_CONFIG)) \
+	   --backup=$(backuptool) \
+	   --override_device=$(override_device) $(override_prop) \
+	   $(BUILT_TARGET_FILES_PACKAGE) $@
+endif
 
 .PHONY: otapackage deso bootzip
 otapackage: $(INTERNAL_OTA_PACKAGE_TARGET)
