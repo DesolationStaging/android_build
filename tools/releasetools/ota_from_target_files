@@ -417,7 +417,6 @@ def GetOemProperty(name, oem_props, oem_dict, info_dict):
     return oem_dict[name]
   return GetBuildProp(name, info_dict)
 
-
 def CalculateFingerprint(oem_props, oem_dict, info_dict):
   if oem_props is None:
     return GetBuildProp("ro.build.fingerprint", info_dict)
@@ -1405,7 +1404,6 @@ endif;
   script.AddToZip(target_zip, output_zip, input_path=OPTIONS.updater_binary)
 
   WriteMetadata(metadata, output_zip)
-
 
 def main(argv):
 
