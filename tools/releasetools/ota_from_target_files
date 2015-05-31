@@ -126,7 +126,7 @@ OPTIONS.updater_binary = None
 OPTIONS.oem_source = None
 OPTIONS.fallback_to_full = True
 OPTIONS.override_device = 'auto'
-OPTIONS.backuptool = True
+OPTIONS.backuptool = False
 
 def MostPopularKey(d, default):
   """Given a dict, return the key corresponding to the largest
@@ -494,14 +494,8 @@ def WriteFullOTAPackage(input_zip, output_zip):
       info_dict=OPTIONS.info_dict)
 
   has_recovery_patch = HasRecoveryPatch(input_zip)
-  block_based = OPTIONS.block_based and has_recovery_patch
+  block_based = OPTIONS.block_based
 
-#  if not OPTIONS.omit_prereq:
-#    ts = GetBuildProp("ro.build.date.utc", OPTIONS.info_dict)
-#    ts_text = GetBuildProp("ro.build.date", OPTIONS.info_dict)
-#    script.AssertOlderBuild(ts, ts_text)
-
-  AppendAssertions(script, OPTIONS.info_dict, oem_dict)
   device_specific.FullOTA_Assertions()
 
   # Two-step package strategy (in chronological order, which is *not*
@@ -563,6 +557,10 @@ else if get_stage("%(bcb_dev)s") == "3/3" then
   if HasVendorPartition(input_zip):
     system_progress -= 0.1
 
+  if block_based:
+    common.ZipWriteStr(output_zip, "system/bin/otasigcheck.sh",
+                   ""+input_zip.read("SYSTEM/bin/otasigcheck.sh"))
+
   if "selinux_fc" in OPTIONS.info_dict:
     WritePolicyConfig(OPTIONS.info_dict["selinux_fc"], output_zip)
 
@@ -576,6 +574,7 @@ else if get_stage("%(bcb_dev)s") == "3/3" then
     # image.  This has the effect of writing new data from the package
     # to the entire partition, but lets us reuse the updater code that
     # writes incrementals to do it.
+    script.FormatPartition("/system")
     system_tgt = GetImage("system", OPTIONS.input_tmp, OPTIONS.info_dict)
     system_tgt.ResetFileMap()
     system_diff = common.BlockDifference("system", system_tgt, src=None)
@@ -871,11 +870,6 @@ reboot_now("%(bcb_dev)s", "");
 else
 """ % bcb_dev)
 
-  # Verify the existing partitions.
-  system_diff.WriteVerifyScript(script)
-  if vendor_diff:
-    vendor_diff.WriteVerifyScript(script)
-
   script.Comment("---- start making changes here ----")
 
   device_specific.IncrementalOTA_InstallBegin()
@@ -1149,7 +1143,7 @@ def WriteIncrementalOTAPackage(target_zip, source_zip, output_zip):
   #  0.1 for unpacking verbatim files, symlinking, and doing the
   #      device-specific commands.
 
-  AppendAssertions(script, OPTIONS.target_info_dict, oem_dict)
+  #AppendAssertions(script, OPTIONS.target_info_dict, oem_dict)
   device_specific.IncrementalOTA_Assertions()
 
   # Two-step incremental package strategy (in chronological order,
