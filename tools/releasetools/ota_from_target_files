@@ -494,7 +494,6 @@ def WriteFullOTAPackage(input_zip, output_zip):
       info_dict=OPTIONS.info_dict)
 
   has_recovery_patch = HasRecoveryPatch(input_zip)
-  block_based = OPTIONS.block_based
 
   device_specific.FullOTA_Assertions()
 
@@ -541,7 +540,7 @@ else if get_stage("%(bcb_dev)s") == "3/3" then
   device_specific.FullOTA_InstallBegin()
 
   if OPTIONS.backuptool:
-    if block_based:
+    if OPTIONS.block_based:
       common.ZipWriteStr(output_zip, "system/bin/backuptool.sh",
                      ""+input_zip.read("SYSTEM/bin/backuptool.sh"))
       common.ZipWriteStr(output_zip, "system/bin/backuptool.functions",
@@ -557,7 +556,7 @@ else if get_stage("%(bcb_dev)s") == "3/3" then
   if HasVendorPartition(input_zip):
     system_progress -= 0.1
 
-  if block_based:
+  if OPTIONS.block_based:
     common.ZipWriteStr(output_zip, "system/bin/otasigcheck.sh",
                    ""+input_zip.read("SYSTEM/bin/otasigcheck.sh"))
 
@@ -571,7 +570,7 @@ else if get_stage("%(bcb_dev)s") == "3/3" then
   system_items = ItemSet("system", "META/filesystem_config.txt")
   script.ShowProgress(system_progress, 0)
 
-  if block_based:
+  if OPTIONS.block_based:
     # Full OTA is done as an "incremental" against an empty source
     # image.  This has the effect of writing new data from the package
     # to the entire partition, but lets us reuse the updater code that
@@ -599,7 +598,7 @@ else if get_stage("%(bcb_dev)s") == "3/3" then
   boot_img = common.GetBootableImage("boot.img", "boot.img",
                                      OPTIONS.input_tmp, "BOOT")
 
-  if not block_based:
+  if not OPTIONS.block_based:
     def output_sink(fn, data):
       common.ZipWriteStr(output_zip, "recovery/" + fn, data)
       system_items.Get("system/" + fn, dir=False)
@@ -614,7 +613,7 @@ else if get_stage("%(bcb_dev)s") == "3/3" then
     vendor_items = ItemSet("vendor", "META/vendor_filesystem_config.txt")
     script.ShowProgress(0.1, 0)
 
-    if block_based:
+    if OPTIONS.block_based:
       vendor_tgt = GetImage("vendor", OPTIONS.input_tmp, OPTIONS.info_dict)
       vendor_tgt.ResetFileMap()
       vendor_diff = common.BlockDifference("vendor", vendor_tgt)
@@ -635,10 +634,10 @@ else if get_stage("%(bcb_dev)s") == "3/3" then
 
   if OPTIONS.backuptool:
     script.ShowProgress(0.02, 10)
-    if block_based:
+    if OPTIONS.block_based:
       script.Mount("/system")
       script.RunBackup("restore")
-    if block_based:
+    if OPTIONS.block_based:
       script.Unmount("/system")
 
   script.Print("Installing Superuser...")
@@ -1467,8 +1466,11 @@ def main(argv):
       OPTIONS.no_signing = True
     elif o in ("--verify"):
       OPTIONS.verify = True
-    elif o == "--block":
-      OPTIONS.block_based = True
+    elif o == ("--block"):
+      if a in ("true", "True"):
+        OPTIONS.block_based = True
+      else:
+        OPTIONS.block_based = False
     elif o in ("-b", "--binary"):
       OPTIONS.updater_binary = a
     elif o in ("--no_fallback_to_full",):
@@ -1489,7 +1491,7 @@ def main(argv):
                                               "aslr_mode=",
                                               "two_step",
                                               "no_signing",
-                                              "block",
+                                              "block=",
                                               "binary=",
                                               "oem_settings=",
                                               "verify",

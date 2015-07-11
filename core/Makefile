@@ -1545,12 +1545,18 @@ else
     DESO_TARGET_PACKAGE := $(OUT)/Desolation-$(ROM_VERSION)-$(TARGET_PRODUCT_SHORT)-$(ROM_BUILDTYPE).zip
 endif
 
+ifeq ($(FILEBASE_OTA_ZIP),)
+$(INTERNAL_OTA_PACKAGE_TARGET):  block_based := true
+else
+$(INTERNAL_OTA_PACKAGE_TARGET):  block_based := false
+endif
+
 $(INTERNAL_OTA_PACKAGE_TARGET): $(BUILT_TARGET_FILES_PACKAGE) $(DISTTOOLS)
 	@echo -e ${PRT_HST}"Package OTA:"${CL_RST}" $@"
 	$(hide) MKBOOTIMG=$(MKBOOTIMG) \
 	   ./build/tools/releasetools/ota_from_target_files -v \
 	   -no_prereq \
-           $(if $(DESO_PRODUCT), --block) \
+       --block=$(block_based) \
 	   -p $(HOST_OUT) \
 	   -k $(KEY_CERT_PAIR) \
 	   $(if $(OEM_OTA_CONFIG), -o $(OEM_OTA_CONFIG)) \
@@ -1568,7 +1574,7 @@ endif
 endif
 	$(hide) ln -f $(INTERNAL_OTA_PACKAGE_TARGET) $(DESO_TARGET_PACKAGE)
 	$(hide) $(MD5SUM) $(DESO_TARGET_PACKAGE) > $(DESO_TARGET_PACKAGE).md5
-	$(hide) clear
+	$(hide) clear	
 	@echo -e ${CL_CYN}" =-Desolation complete-= "${CL_RST}
 	@echo -e ${CL_GRN}"zip: $(DESO_TARGET_PACKAGE)"${CL_RST}
 	@echo -e ${CL_GRN}"md5: "${CL_MAG}" `cat $(DESO_TARGET_PACKAGE).md5 | cut -d ' ' -f 1`"${CL_RST}
